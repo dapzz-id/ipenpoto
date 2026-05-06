@@ -1,0 +1,85 @@
+services:
+  app-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: api-ipenpoto-app
+    restart: unless-stopped
+    volumes:
+      - ./:/app
+    env_file:
+      - .env
+    environment:
+      DB_HOST: db-api-1
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: password123
+      DB_NAME: api_ipenpoto
+      REDIS_HOST: redis-api
+      REDIS_PORT: 6379
+      PORT: 8080
+    networks:
+      - api_ipenpoto_network
+    depends_on:
+      - db-api-1
+      - redis-api
+
+  # Web Server Nginx (Reverse Proxy)
+  web-api:
+    image: nginx:1.29.8-alpine
+    container_name: api-ipenpoto-web
+    restart: unless-stopped
+    ports:
+      - "${PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/sites/default.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - api_ipenpoto_network
+    depends_on:
+      - app-api
+
+  # Database (PostgreSQL 18)
+  db-api-1:
+    image: postgres:18.3-alpine
+    container_name: api-ipenpoto-db-core
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: api_ipenpoto
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password123
+    volumes:
+      - api_postgres_core_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - api_ipenpoto_network
+
+  # Database Management
+  pgadmin-api:
+    image: dpage/pgadmin4
+    container_name: api-ipenpoto-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: kadaviradityaa@gmail.com
+      PGADMIN_DEFAULT_PASSWORD: root
+    ports:
+      - "127.0.0.1:5051:80"
+    networks:
+      - api_ipenpoto_network
+    depends_on:
+      - db-api-1
+
+  redis-api:
+    image: redis:8.6-alpine
+    container_name: api-ipenpoto-redis
+    restart: unless-stopped
+    networks:
+      - api_ipenpoto_network
+
+networks:
+  api_ipenpoto_network:
+    driver: bridge
+
+volumes:
+  api_postgres_core_data:

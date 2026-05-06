@@ -1,0 +1,15 @@
+FROM golang:1.26-alpine
+
+WORKDIR /app
+
+RUN apk add --no-cache git gcc musl-dev
+
+# Install Air untuk live reloading (dev mode)
+RUN go install github.com/air-verse/air@latest tzdata
+ENV TZ=Asia/Jakarta
+
+# Copy go.mod dan go.sum untuk caching download
+COPY go.mod go.sum ./
+RUN go mod download
+
+CMD ["air"]
