@@ -1,0 +1,11 @@
+* text=auto eol=lf
+
+*.blade.php diff=blade
+*.go diff=go
+Dockerfile diff=Docker
+docker-compose.yml diff=Docker
+*.md diff=markdown
+
+/.github export-ignore
+CHANGELOG.md export-ignore
+.styleci.yml export-ignore
