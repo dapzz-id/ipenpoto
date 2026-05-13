@@ -12,17 +12,27 @@ services:
     environment:
       DB_HOST: db-api-1
       DB_PORT: 5432
-      DB_USERNAME: postgres
-      DB_PASSWORD: password123
-      DB_NAME: api_ipenpoto
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-api_ipenpoto}
+      DB_SSL_MODE: disable
       REDIS_HOST: redis-api
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       PORT: 8080
     networks:
       - api_ipenpoto_network
     depends_on:
-      - db-api-1
-      - redis-api
+      db-api-1:
+        condition: service_healthy
+      redis-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "test", "-f", "/proc/1/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
   # Web Server Nginx (Reverse Proxy)
   web-api:
@@ -37,7 +47,8 @@ services:
     networks:
       - api_ipenpoto_network
     depends_on:
-      - app-api
+      app-api:
+        condition: service_healthy
 
   # Database (PostgreSQL 18)
   db-api-1:
@@ -45,37 +56,50 @@ services:
     container_name: api-ipenpoto-db-core
     restart: unless-stopped
     environment:
-      POSTGRES_DB: api_ipenpoto
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: ${DB_NAME:-api_ipenpoto}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - api_postgres_core_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     networks:
       - api_ipenpoto_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # Database Management
+  # Database Management (only in development)
   pgadmin-api:
     image: dpage/pgadmin4
     container_name: api-ipenpoto-pgadmin
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: kadaviradityaa@gmail.com
-      PGADMIN_DEFAULT_PASSWORD: root
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
     ports:
       - "127.0.0.1:5051:80"
     networks:
       - api_ipenpoto_network
     depends_on:
-      - db-api-1
+      db-api-1:
+        condition: service_healthy
 
+  # Redis Cache
   redis-api:
     image: redis:8.6-alpine
     container_name: api-ipenpoto-redis
     restart: unless-stopped
+    command: redis-server
     networks:
       - api_ipenpoto_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 networks:
   api_ipenpoto_network:
