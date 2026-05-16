@@ -171,6 +171,8 @@ curl -i http://localhost:8080/api/auth/login
 
 **Rate Limit:** 5 requests per 5 minutes
 
+**Notes:** User must have verified email to login
+
 #### Request
 
 ```bash
@@ -238,6 +240,14 @@ curl -X POST http://localhost:8080/api/auth/login \
 {
   "success": false,
   "message": "Invalid username or password"
+}
+```
+
+**403 Forbidden - Email Not Verified**
+```json
+{
+  "success": false,
+  "message": "Email not verified. Check your inbox to verify your email"
 }
 ```
 
@@ -318,9 +328,11 @@ echo "Refresh Token: $REFRESH_TOKEN"
 
 **Endpoint:** `POST /api/auth/register`
 
-**Description:** Register new user and get tokens
+**Description:** Register new user and send email verification
 
 **Rate Limit:** 5 requests per 5 minutes
+
+**Notes:** User receives verification email. Must verify email before login.
 
 #### Request
 
@@ -351,20 +363,20 @@ curl -X POST http://localhost:8080/api/auth/register \
 ```json
 {
   "status": "success",
-  "message": "User registered successfully",
+  "message": "Registration successful. Check your email to verify your account.",
   "data": {
-    "user": {
-      "id": "938d9e55-22e8-46dd-9c79-e685afe8b32a",
-      "username": "johndoe",
-      "role": "customer"
-    },
-    "tokens": {
-      "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-      "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-    }
+    "id": "938d9e55-22e8-46dd-9c79-e685afe8b32a",
+    "email": "johndoe@example.com"
   }
 }
 ```
+
+#### Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `data.id` | UUID | User ID |
+| `data.email` | string | User email (for verification confirmation) |
 
 #### Errors
 
@@ -435,6 +447,125 @@ curl -X POST http://localhost:8080/api/auth/register \
     "password": "Password123!@#",
     "password_confirmation": "Password123!@#"
   }'
+```
+
+---
+
+### 3. Verify Email
+
+**Endpoint:** `GET /api/auth/verify-email`
+
+**Description:** Verify user email using token sent via email
+
+**Rate Limit:** 5 requests per 5 minutes
+
+**Notes:** Token expires after 24 hours. User status changes from `Pending` to `Online` upon successful verification.
+
+#### Request
+
+```bash
+curl -X GET "http://localhost:8080/api/auth/verify-email?token=abc123def456..." \
+  -H "Content-Type: application/json"
+```
+
+#### Query Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `token` | string | Yes | Verification token from email link |
+
+#### Response (200 OK)
+
+```json
+{
+  "status": "success",
+  "message": "Email verified successfully. You can now login.",
+  "data": {}
+}
+```
+
+#### Errors
+
+**400 Bad Request - Missing Token**
+```json
+{
+  "status": "error",
+  "message": "Verification token is required",
+  "error": null
+}
+```
+
+**400 Bad Request - Invalid/Expired Token**
+```json
+{
+  "status": "error",
+  "message": "verification token expired or invalid",
+  "error": null
+}
+```
+
+**400 Bad Request - Already Verified**
+```json
+{
+  "status": "error",
+  "message": "Email already verified",
+  "error": null
+}
+```
+
+#### Email Flow Example
+
+1. **User registers:**
+   ```bash
+   POST /api/auth/register
+   # Response includes id and email
+   ```
+
+2. **System sends email with link:**
+   ```
+   Click here to verify: 
+   http://localhost:3000/verify-email?token=abc123def456
+   ```
+
+3. **Frontend redirects to API:**
+   ```bash
+   GET /api/auth/verify-email?token=abc123def456
+   # Returns success
+   ```
+
+4. **User can now login:**
+   ```bash
+   POST /api/auth/login
+   # Success with tokens
+   ```
+
+#### Examples
+
+**JavaScript - Frontend Integration**
+```javascript
+// Extract token from URL
+const params = new URLSearchParams(window.location.search);
+const token = params.get('token');
+
+if (token) {
+  fetch(`http://localhost:8080/api/auth/verify-email?token=${token}`)
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'success') {
+        alert('Email verified! You can now login.');
+        window.location.href = '/login';
+      } else {
+        alert('Error: ' + data.message);
+      }
+    });
+}
+```
+
+**cURL**
+```bash
+TOKEN="abc123def456def789ghi012jkl345mno"
+curl -X GET "http://localhost:8080/api/auth/verify-email?token=$TOKEN" \
+  -H "Content-Type: application/json"
 ```
 
 ---

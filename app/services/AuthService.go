@@ -13,17 +13,23 @@ import (
 )
 
 type AuthService struct {
-	UserRepo   *repositories.UserRepository
-	JWTService *JWTService
+	UserRepo                   *repositories.UserRepository
+	JWTService                 *JWTService
+	EmailVerificationService   *EmailVerificationService
+	EmailService               *EmailService
 }
 
 func NewAuthService(
 	userRepo *repositories.UserRepository,
 	jwtService *JWTService,
+	emailVerificationService *EmailVerificationService,
+	emailService *EmailService,
 ) *AuthService {
 	return &AuthService{
-		UserRepo:   userRepo,
-		JWTService: jwtService,
+		UserRepo:                 userRepo,
+		JWTService:               jwtService,
+		EmailVerificationService: emailVerificationService,
+		EmailService:             emailService,
 	}
 }
 
@@ -49,6 +55,10 @@ func (s *AuthService) Login(
 	)
 	if err != nil {
 		return nil, "", "", errors.New(invalidCreds)
+	}
+
+	if user.EmailVerifiedAt == nil {
+		return nil, "", "", errors.New("Email not verified. Check your inbox to verify your email")
 	}
 
 	accessToken, err := s.JWTService.GenerateAccessToken(
@@ -80,19 +90,17 @@ func (s *AuthService) Register(
 	email string,
 	password string,
 ) (
-	*responses.LoginResponse,
-	string,
-	string,
+	*models.User,
 	error,
 ) {
 	existingUser, _ := s.UserRepo.FindByUsername(username)
 	if existingUser != nil {
-		return nil, "", "", errors.New("Username already exists")
+		return nil, errors.New("Username already exists")
 	}
 
 	existingEmail, _ := s.UserRepo.FindByEmail(email)
 	if existingEmail != nil {
-		return nil, "", "", errors.New("Email already exists")
+		return nil, errors.New("Email already exists")
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword(
@@ -100,7 +108,7 @@ func (s *AuthService) Register(
 		bcrypt.DefaultCost,
 	)
 	if err != nil {
-		return nil, "", "", err
+		return nil, err
 	}
 
 	user := &models.User{
@@ -110,33 +118,46 @@ func (s *AuthService) Register(
 		Email:    email,
 		Password: string(hashedPassword),
 		Role:     enums.Customer,
-		Status:   enums.Online,
+		Status:   enums.Pending,
 	}
 
 	err = s.UserRepo.Create(user)
 	if err != nil {
-		return nil, "", "", err
+		return nil, err
 	}
 
-	accessToken, err := s.JWTService.GenerateAccessToken(
-		user.ID,
-		user.Username,
-		user.Role,
-	)
+	verificationToken, err := s.EmailVerificationService.GenerateToken(user.ID)
 	if err != nil {
-		return nil, "", "", err
+		return nil, errors.New("Failed to generate verification token")
 	}
 
-	refreshToken, err := s.JWTService.GenerateRefreshToken(
-		user.ID,
-	)
+	err = s.EmailService.SendVerificationEmail(user, verificationToken)
 	if err != nil {
-		return nil, "", "", err
+		return nil, errors.New("Failed to send verification email")
 	}
 
-	return &responses.LoginResponse{
-		ID:       user.ID,
-		Username: user.Username,
-		Role:     string(user.Role),
-	}, accessToken, refreshToken, nil
+	return user, nil
+}
+
+func (s *AuthService) VerifyEmail(token string) error {
+	userID, err := s.EmailVerificationService.VerifyToken(token)
+	if err != nil {
+		return err
+	}
+
+	user, err := s.UserRepo.FindByID(userID)
+	if err != nil {
+		return errors.New("User not found")
+	}
+
+	if user.EmailVerifiedAt != nil {
+		return errors.New("Email already verified")
+	}
+
+	err = s.UserRepo.VerifyEmail(userID)
+	if err != nil {
+		return errors.New("Failed to verify email")
+	}
+
+	return nil
 }

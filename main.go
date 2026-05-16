@@ -63,7 +63,9 @@ func main() {
 
 	userRepo := repositories.NewUserRepository(config.DB)
 	jwtService := services.NewJWTService()
-	authService := services.NewAuthService(userRepo, jwtService)
+	emailVerificationService := services.NewEmailVerificationService(config.RDB)
+	emailService := services.NewEmailService()
+	authService := services.NewAuthService(userRepo, jwtService, emailVerificationService, emailService)
 	authController := controllers.NewAuthController(authService)
 	userController := controllers.NewUserController(userRepo)
 

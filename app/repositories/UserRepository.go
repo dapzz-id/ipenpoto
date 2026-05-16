@@ -68,3 +68,12 @@ func (r *UserRepository) FindByID(id uuid.UUID) (*models.User, error) {
 
 	return &user, nil
 }
+
+func (r *UserRepository) VerifyEmail(userID uuid.UUID) error {
+	return r.DB.Model(&models.User{}).
+		Where("id = ?", userID).
+		Updates(map[string]interface{}{
+			"email_verified_at": gorm.Expr("NOW()"),
+			"status":            "active",
+		}).Error
+}

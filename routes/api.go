@@ -17,6 +17,7 @@ func SetupRoutes(app *fiber.App, ctrl controllers.Controllers) {
 	authPublic.Use(middleware.RateLimit(5, 300))
 	authPublic.Post("/login", ctrl.Auth.Login)
 	authPublic.Post("/register", ctrl.Auth.Register)
+	authPublic.Get("/verify-email", ctrl.Auth.VerifyEmail)
 
 	// Protected routes
 	userProtected := api.Group("/user", middleware.JWTProtected())
